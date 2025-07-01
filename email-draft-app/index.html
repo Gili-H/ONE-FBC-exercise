@@ -20,6 +20,26 @@
     textarea {
       height: 120px;
     }
+    ul#draftList {
+      list-style: none;
+      padding: 0;
+    }
+    ul#draftList li {
+      background: #f5f5f5;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    ul#draftList button {
+      width: auto;
+      margin-bottom: 0;
+      font-size: 14px;
+      margin-left: 5px;
+    }
   </style>
 </head>
 <body>
@@ -27,54 +47,86 @@
   <form id="emailForm">
     <label for="to">נמען (מופרדים בפסיק):</label>
     <input type="text" id="to" required />
-    
+
     <label for="subject">נושא:</label>
     <input type="text" id="subject" required />
-    
+
     <label for="body">גוף ההודעה:</label>
     <textarea id="body" required></textarea>
-    
+
     <label for="fileInput">קובץ מצורף (pdf, doc, docx):</label>
     <input type="file" id="fileInput" accept=".pdf,.doc,.docx" required />
-    
-    <button type="submit">צור ופתח טיוטה</button>
+
+    <button type="submit">הוסף לטיוטות</button>
   </form>
+
+  <h2>טיוטות ממתינות</h2>
+  <ul id="draftList"></ul>
 
   <script>
     const form = document.getElementById('emailForm');
+    let pendingDrafts = [];
 
-   form.addEventListener('submit', async (e) => {
-  e.preventDefault();
+    function renderDrafts() {
+      const list = document.getElementById('draftList');
+      list.innerHTML = '';
+      pendingDrafts.forEach((draft, idx) => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span>
+            <b>${draft.subject}</b> (${draft.to}) - ${draft.fileName}
+          </span>
+          <span>
+            <button onclick="openDraft(${idx})">פתח</button>
+            <button onclick="deleteDraft(${idx})">מחק</button>
+          </span>
+        `;
+        list.appendChild(li);
+      });
+    }
 
-  const to = document.getElementById('to').value;
-  const subject = document.getElementById('subject').value;
-  const body = document.getElementById('body').value;
-  const fileInput = document.getElementById('fileInput');
-  const file = fileInput.files[0];
+    window.openDraft = function(idx) {
+      window.electronAPI.createAndOpenEml(pendingDrafts[idx]);
+      pendingDrafts.splice(idx, 1);
+      renderDrafts();
+    };
 
-  if (!file) {
-    alert("לא נבחר קובץ");
-    return;
-  }
+    window.deleteDraft = function(idx) {
+      pendingDrafts.splice(idx, 1);
+      renderDrafts();
+    };
 
-  const reader = new FileReader();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
 
-  reader.onload = async () => {
-    const base64 = reader.result.split(',')[1];
+      const to = document.getElementById('to').value;
+      const subject = document.getElementById('subject').value;
+      const body = document.getElementById('body').value;
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
 
-    await window.electronAPI.createAndOpenEml({
-      to,
-      subject,
-      body,
-      filePath: file.path,        // לא חובה, לא נעשה בו שימוש
-      fileName: file.name,
-      fileBase64: base64
+      if (!file) {
+        alert("לא נבחר קובץ");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result.split(',')[1];
+        // Add to pending drafts instead of sending immediately
+        pendingDrafts.push({
+          to,
+          subject,
+          body,
+          filePath: file.path,
+          fileName: file.name,
+          fileBase64: base64
+        });
+        renderDrafts();
+        form.reset();
+      };
+      reader.readAsDataURL(file);
     });
-  };
-
-  reader.readAsDataURL(file);
-});
-
   </script>
 </body>
 </html>
